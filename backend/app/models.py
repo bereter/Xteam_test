@@ -1,5 +1,4 @@
 import uuid
-
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -44,6 +43,7 @@ class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    orders: list["Order"] = Relationship(back_populates="user", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -112,3 +112,74 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+
+
+# Many-to-many table
+class ProductOrder(SQLModel, table=True):
+    product_id: uuid.UUID | None = Field(default=None, foreign_key="product.id", primary_key=True, ondelete="CASCADE")
+    order_id: uuid.UUID | None = Field(default=None, foreign_key="order.id", primary_key=True, ondelete="CASCADE")
+
+
+# Shared properties
+class ProductBase(SQLModel):
+    name: str = Field(max_length=255)
+    category: str = Field(max_length=255)
+    prise: int = Field(gt=0)
+    rating: int = Field(ge=0, le=10)
+
+
+# Properties to receive via API on creation
+class ProductCreate(ProductBase):
+    pass
+
+
+# Properties to receive on item update
+class ProductUpdate(ProductBase):
+    name: str | None = Field(default= None, max_length=255)
+    category: str | None = Field(default= None, max_length=255)
+    prise: int | None = Field(default= None, gt=0)
+    rating: int | None = Field(default= None, ge=0, le=10)
+
+
+# Database model, database table inferred from class name
+class Product(ProductBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    orders: list["Order"] = Relationship(back_populates="products", link_model=ProductOrder)
+
+
+class ProductPublic(ProductBase):
+    id: uuid.UUID
+
+
+# Shared properties
+class OrderBase(SQLModel):
+    description: str | None = Field(default=None, max_length=255)
+
+
+# Properties to receive via API on creation
+class OrderCreate(OrderBase):
+    pass
+
+
+# Properties to receive on item update
+class OrderUpdate(OrderBase):
+    pass
+
+
+# Properties to return via API, id is always required
+class OrderPublicAll(OrderBase):
+    id: uuid.UUID
+
+
+# Properties to return via API, id is always required
+class OrderPublicOne(OrderBase):
+    id: uuid.UUID
+    products: list["Product"]
+
+
+# Database model, database table inferred from class name
+class Order(OrderBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    products: list["Product"] = Relationship(back_populates="orders", link_model=ProductOrder)
+    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    user: User | None = Relationship(back_populates="orders")
